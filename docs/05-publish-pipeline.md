@@ -2,162 +2,172 @@
 
 ## Overview
 
-Il publish non è un semplice "salva e vai live". È un **pipeline orchestrato** che garantisce qualità prima di rendere la pagina pubblica.
-
-```
-Creator clicca "Publish"
-         │
-         ▼
-  ┌─────────────┐
-  │  Scheduler  │  now / scheduled datetime
-  └──────┬──────┘
-         │
-         ▼
-  ┌─────────────┐
-  │ Build Engine│  JSON → HTML statico
-  └──────┬──────┘
-         │
-         ├──────────────────────┐
-         ▼                      ▼
-  ┌─────────────┐       ┌─────────────┐
-  │  SEO Agent  │       │ Speed Agent │
-  └──────┬──────┘       └──────┬──────┘
-         │                      │
-         └──────────┬───────────┘
-                    ▼
-           ┌─────────────────┐
-           │ Verifier Agent  │
-           │ (quality gate)  │
-           └────────┬────────┘
-                    │
-         ┌──────────┴──────────┐
-         ▼                     ▼
-   [PASS: pubblica]     [FAIL: blocca]
-         │                     │
-         ▼                     ▼
-   Output su CDN/VPS    Report al creator
-```
+Il publish è un pipeline orchestrato a stato che garantisce qualità prima di rendere le pagine pubbliche. È basato su una **job queue** persistita nel data provider, dove ogni riga rappresenta una singola pagina da pubblicare.
 
 ---
 
-## Fasi del pipeline
+## Entità della queue
 
-### Fase 1 — Trigger
-
-Il creator sceglie:
-- **Publish Now**: avvia subito il pipeline
-- **Schedule**: mette in coda per una data/ora specifica
-- **Save Draft**: salva senza avviare nulla
-
-### Fase 2 — Build Engine
-
-Legge dal data provider i JSON dell'entità da pubblicare e applica il template definito dal crafter.
-
-Output:
-- `/{slug}/index.html` — pagina HTML principale
-- Aggiornamento di `/data/{type}.json`
-- Aggiornamento di `/llms.txt`
-- Aggiornamento di `/sitemap.xml`
-
-Il build engine **non pubblica ancora** — produce file in una staging area.
-
-### Fase 3 — Agenti in parallelo
-
-Partono in parallelo su i file nella staging area:
-
-#### SEO Agent
-- Analizza il contenuto HTML prodotto
-- Verifica: title tag, meta description, H1 unico, struttura heading, alt image, link interni
-- Verifica coerenza con le keyword target (definite dal SEO Orchestrator)
-- Verifica JSON-LD corretto e completo
-- Produce un `seo_report.json` con score e issues
-
-#### Speed Agent
-- Analizza il bundle HTML/CSS/JS
-- Esegue PageSpeed Insights API (o equivalente)
-- Verifica: immagini ottimizzate, CSS minificato, JS minimale, lazy loading, cache headers
-- Può applicare fix automatici (minificazione, ottimizzazione immagini)
-- Produce un `speed_report.json` con score e issues
-
-### Fase 4 — Verifier Agent (Quality Gate)
-
-Riceve i report da SEO Agent e Speed Agent e applica le soglie configurate:
+### `PublishJob`
+Rappresenta una singola operazione di publish avviata dall'utente.
 
 ```json
 {
-  "qualityGate": {
-    "pagespeed": { "min": 90, "blocking": true },
-    "seo": { "min": 85, "blocking": true },
-    "accessibility": { "min": 80, "blocking": false }
+  "id": "job-uuid",
+  "triggeredBy": "user-id",
+  "triggeredAt": "ISO8601",
+  "workflowId": "strict-landing",
+  "status": "running | completed | partial",
+  "stats": {
+    "total": 10,
+    "validated": 9,
+    "published": 9,
+    "blocked": 1
   }
 }
 ```
 
-- `blocking: true` — se sotto soglia, la pubblicazione è bloccata
-- `blocking: false` — se sotto soglia, la pubblicazione procede con warning
-
-Output: `verification_result.json` con `status: "pass" | "fail"` e lista issues.
-
-### Fase 5 — Publish o Block
-
-**Se PASS:**
-- I file dalla staging area vengono copiati nell'output pubblico
-- Il `_build.qualityScore` dell'entità viene aggiornato nel data provider
-- Il `_meta.status` diventa `published`
-- Il `_build.lastPublishedAt` viene aggiornato
-
-**Se FAIL:**
-- I file staging vengono eliminati
-- Il creator riceve un report dettagliato con:
-  - Score ottenuto vs soglia richiesta
-  - Lista degli issues specifici da correggere
-  - Suggerimenti di fix (dove possibile)
-- Il `_meta.status` rimane `draft` o `scheduled`
-
----
-
-## Configurazione del Quality Gate
-
-Configurata dal crafter per sito, con possibilità di override per content type:
+### `PublishTask`
+Una riga = una pagina. Ogni task traccia il proprio stato e il progresso per agente.
 
 ```json
 {
-  "siteDefaults": {
-    "pagespeed": { "min": 90, "blocking": true },
-    "seo": { "min": 85, "blocking": true },
-    "accessibility": { "min": 80, "blocking": false }
-  },
-  "overrides": {
-    "landing-page": {
-      "pagespeed": { "min": 95, "blocking": true }
+  "id": "task-uuid",
+  "jobId": "job-uuid",
+  "pageId": "page-ref",
+  "slug": "/blog/my-article",
+  "workflowId": "strict-landing",
+  "status": "QUEUED | TRANSFORMING | TRANSFORM_REVIEW | TRANSFORM_DONE | VALIDATING | VALIDATED | VALIDATION_BLOCKED | DEPLOYING | DEPLOYED | DEPLOY_FAILED",
+  "retryCount": 0,
+  "agents": {
+    "SeoAgent": {
+      "status": "pending | running | done | blocked",
+      "retries": 0,
+      "report": {}
+    },
+    "OptimizerAgent": {
+      "status": "pending | running | done | blocked",
+      "retries": 0,
+      "report": {}
+    },
+    "SentinelAgent": {
+      "status": "pending | running | done | blocked",
+      "retries": 0,
+      "report": {}
     }
-  }
+  },
+  "reviewItems": [],
+  "createdAt": "ISO8601",
+  "updatedAt": "ISO8601"
 }
 ```
 
-Il crafter può anche **bypassare il quality gate** per una pubblicazione specifica, con log obbligatorio del motivo.
+---
+
+## State machine del `PublishTask`
+
+```
+QUEUED
+  └─► TRANSFORMING
+        [SeoAgent.transform() ∥ OptimizerAgent.transform() ∥ ...]
+        Ogni agente si auto-valida internamente prima di segnare done.
+        │
+        ├─ tutti gli agenti → done ──────────────► TRANSFORM_DONE
+        └─ uno o più agenti → blocked ───────────► TRANSFORM_REVIEW
+                                                    (attende azione umana)
+
+TRANSFORM_DONE
+  └─► VALIDATING
+        [SentinelAgent.run()]
+        Chiama validate() di ogni transform agent + check esclusivi.
+        │
+        ├─ tutto ok ─────────────────────────────► VALIDATED
+        ├─ fail + retryCount < maxRetries ───────► re-trigger agenti target
+        │                                           └─► TRANSFORMING (agenti specifici)
+        └─ fail + retryCount >= maxRetries ──────► VALIDATION_BLOCKED
+                                                    (attende azione umana)
+
+VALIDATED
+  └─► (raccolto dal PublisherAgent insieme agli altri VALIDATED)
+        └─► DEPLOYING
+              ├─ ok ──► DEPLOYED
+              └─ fail ─► DEPLOY_FAILED → (review umano)
+```
 
 ---
 
-## Orchestrazione agenti — opzioni tecniche (da decidere)
+## Ciclo interno di ogni TransformAgent
 
-| Opzione | Pro | Contro |
-|---|---|---|
-| **Custom workflow** (Node.js) | Zero dipendenze, controllo totale | Da costruire da zero |
-| **Inngest** | Event-driven, retry nativi, UI di monitoring | Dipendenza esterna, costi |
-| **LangGraph** | Nativamente pensato per agenti AI | Overkill per fasi non-AI |
-| **BullMQ** (Redis) | Job queue robusto, scheduling nativo | Richiede Redis infrastruttura |
+Prima di segnare il proprio task come `done`, ogni transform agent esegue il proprio validatore interno:
 
-**Raccomandazione**: iniziare con custom workflow Node.js per MVP, valutare Inngest o BullMQ quando il volume di publish lo richiede.
+```
+transform(page, config)
+  └─► validate(page, config)
+        ├─ pass ──► segna done, emette report
+        └─ fail ──► retry transform (fino a config.maxRetries)
+                      └─ ancora fail dopo maxRetries ──► segna blocked, popola reviewItems
+```
+
+Il `maxRetries` è definito una volta nel workflow config e condiviso tra il ciclo interno dell'agente e i retry del SentinelAgent.
 
 ---
 
-## Estensibilità
+## SentinelAgent
 
-Il pipeline è progettato per essere estensibile. Nuovi agenti possono essere aggiunti dal crafter come step opzionali:
+Non contiene regole proprie hardcoded. Funziona come **orchestratore di validatori**:
 
-- **Accessibility Agent** — verifica WCAG
-- **Content Quality Agent** — verifica grammatica, leggibilità, plagiarism
-- **Brand Voice Agent** — verifica coerenza con il tono di voce del brand
-- **Link Checker Agent** — verifica link non rotti
-- **Security Scanner** — verifica header di sicurezza nell'HTML
+```
+SentinelAgent.run(page, workflow)
+  ├─► Per ogni transform agent nel workflow:
+  │     agent.validate(page, config)  ← stessa funzione usata dall'agente internamente
+  │
+  ├─► SentinelAgent.exclusiveChecks(page)
+  │     (PageSpeed API, lighthouse, check esterni, ecc.)
+  │
+  └─► Aggrega tutti i report
+        ├─ tutti pass ──► emette VALIDATED
+        └─ qualcuno fail:
+             ├─ identifica gli agenti responsabili del fail
+             ├─ se retryCount < maxRetries ──► re-trigger agenti target
+             └─ se retryCount >= maxRetries ──► emette VALIDATION_BLOCKED
+```
+
+Il retry target è deterministico: se `SeoAgent.validate()` fallisce → si ri-triggera `SeoAgent.transform()`. Mapping 1:1.
+
+---
+
+## PublisherAgent
+
+Stateless per design. Non ha memoria dei job precedenti.
+
+```
+PublisherAgent.run(job)
+  ├─► Raccoglie tutti i PublishTask con status VALIDATED
+  ├─► Ignora TRANSFORM_REVIEW, VALIDATION_BLOCKED, DEPLOY_FAILED
+  ├─► Pacchettizza i file HTML/CSS/JS delle pagine validate
+  ├─► Pubblica sui canali configurati nel workflow (dev | stage | prod)
+  │     └─ Supporta pubblicazione multi-canale simultanea
+  ├─► Aggiorna status → DEPLOYED (per pagina pubblicata con successo)
+  └─► Aggiorna status → DEPLOY_FAILED (per pagina fallita, con motivo)
+```
+
+**Policy**: pubblica ciò che è pronto, ignora il resto. Le pagine bloccate aspettano il prossimo publish esplicito dell'utente, che riparte da zero senza memoria pregressa.
+
+---
+
+## Progress e visibilità
+
+L'utente vede in tempo reale:
+
+```
+PublishJob #42 — 10 pagine
+├── /home                    ✓ DEPLOYED
+├── /blog/article-1          ✓ DEPLOYED
+├── /blog/article-2          ⟳ VALIDATING  [Sentinel retry 1/3]
+│                                └─ SeoAgent: h1 troppo lungo (72 car > 60 max)
+├── /landing/hero            ✗ TRANSFORM_REVIEW
+│                                └─ OptimizerAgent: immagine non ottimizzabile (formato raw)
+└── ...
+```
+
+Ogni task mostra: stato corrente, agente in esecuzione, dettaglio del problema se bloccato.
