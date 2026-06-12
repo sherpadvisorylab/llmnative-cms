@@ -90,14 +90,14 @@ cms/
 |---|---|---|
 | Admin UI | `@llmnative/react` + Vite + React 18 | Già integra provider agnostici, AI, SEO |
 | Build Engine | Node.js | Processo standalone, nessuna dipendenza frontend |
-| Template Engine | TBD (da decidere) | Da valutare: Nunjucks, Handlebars, o custom |
+| Template Engine | **LiquidJS** | Sandbox sicuro per template scritti da crafter, browser+node, pre-compilabile, filtri nativi |
 | Agent Orchestration | TBD | Da valutare: LangGraph, custom workflow, Inngest |
 | Output Hosting | CDN / VPS | Statico — qualsiasi provider |
 | AI Provider | Anthropic Claude (default) | Già supportato in `@llmnative/react` |
 
 ## Decisioni aperte (da risolvere)
 
-- [ ] Template engine per il build engine
+- [x] Template engine → **LiquidJS** (sicuro, browser+node, pre-compilabile)
 - [ ] Orchestratore degli agenti (LangGraph vs custom vs Inngest)
 - [ ] Formato persistenza schema crafter (JSON nel data provider o file system)
 - [ ] Strategia deploy output statico (GitHub Actions? CI/CD integrato?)
