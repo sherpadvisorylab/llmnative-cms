@@ -157,7 +157,8 @@ I namespace sono estendibili. Le variabili di sistema si usano liberamente nel t
       "label":    "Label visibile nel form di edit",
       "required": true,
       "default":  "valore di default",
-      "options":  ["opzione1", "opzione2"]
+      "options":  ["opzione1", "opzione2"],
+      "showIf":   "espressione condizionale"
     }
   }
 }
@@ -166,6 +167,51 @@ I namespace sono estendibili. Le variabili di sistema si usano liberamente nel t
 Gli `inputs` guidano due sistemi:
 1. **Edit UI**: il builder usa `Component.schema[type](overrides)` per generare il form del creator
 2. **Validazione**: il builder verifica che i dati passati al component rispettino il contratto
+
+### Visibilità condizionale — `showIf`
+
+`showIf` controlla la visibilità di un campo nell'edit UI in base al valore di altri campi dello stesso component. Il campo esiste sempre nei dati — semplicemente non viene mostrato al creator quando la condizione è falsa.
+
+```json
+{% schema %}
+{
+  "name": "Hero",
+  "inputs": {
+    "title":       { "type": "text",     "label": "Titolo" },
+    "subtitle":    { "type": "text",     "label": "Sottotitolo" },
+    "show_cta":    { "type": "boolean",  "label": "Mostra CTA",    "default": false },
+    "cta_text":    { "type": "text",     "label": "Testo CTA",     "showIf": "show_cta == true" },
+    "cta_url":     { "type": "url",      "label": "URL CTA",       "showIf": "show_cta == true" },
+    "layout":      { "type": "select",   "label": "Layout",
+                     "options": ["centered", "left", "grid"],      "default": "centered" },
+    "columns":     { "type": "number",   "label": "Colonne",       "showIf": "layout == 'grid'",
+                     "default": 3 }
+  }
+}
+{% endschema %}
+```
+
+#### Operatori supportati
+
+| Operatore | Esempio |
+|---|---|
+| `==` `!=` | `"layout == 'grid'"` · `"title != ''"` |
+| `>` `<` `>=` `<=` | `"columns > 1"` |
+| `&&` | `"show_cta == true && layout != 'grid'"` |
+| `\|\|` | `"title != '' \|\| subtitle != ''"` |
+| `!` | `"!show_cta"` |
+
+#### Separazione di responsabilità
+
+`showIf` governa la **visibilità nell'edit UI** — non il rendering HTML. Sono due cose distinte e possono avere condizioni diverse:
+
+```liquid
+{{-- edit UI: cta_url visibile solo se show_cta è true (via showIf in schema) --}}
+{{-- template: rendering condizionale indipendente --}}
+{% if show_cta and cta_url != "" %}
+  <a class="hero__cta" href="{{ cta_url }}">{{ cta_text }}</a>
+{% endif %}
+```
 
 ---
 
