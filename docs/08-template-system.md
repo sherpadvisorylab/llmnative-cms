@@ -197,9 +197,14 @@ Gli `inputs` guidano due sistemi:
 |---|---|
 | `==` `!=` | `"layout == 'grid'"` · `"title != ''"` |
 | `>` `<` `>=` `<=` | `"columns > 1"` |
+| `in` | `"layout in ['grid', 'masonry']"` |
+| `nin` | `"layout nin ['centered', 'left']"` |
+| `like` | `"title like 'hero*'"` · `"slug like '*news*'"` |
 | `&&` | `"show_cta == true && layout != 'grid'"` |
 | `\|\|` | `"title != '' \|\| subtitle != ''"` |
 | `!` | `"!show_cta"` |
+
+`like` supporta il wildcard `*` in qualsiasi posizione: `'hero*'` (inizia con), `'*news*'` (contiene), `'*footer'` (finisce con).
 
 #### Separazione di responsabilità
 
