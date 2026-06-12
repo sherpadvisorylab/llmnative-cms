@@ -306,6 +306,38 @@ templates/components/
 
 ---
 
+## Export e import di component
+
+**Il formato del file `.liquid` è il formato di scambio.** Non esiste un formato di export separato.
+
+Un component creato in `components/Hero.liquid` è già pronto per essere:
+- condiviso con altri crafter così com'è
+- importato in qualsiasi altro sito copiando il file in `components/`
+- contribuito alla libreria built-in del CMS
+
+### Contribuire alla libreria built-in
+
+Qualsiasi component collocato in `templates/components/` del repository CMS diventa automaticamente disponibile a tutte le installazioni del CMS. È il meccanismo con cui la libreria built-in cresce nel tempo.
+
+```
+Crafter crea Hero.liquid nel suo sito
+    └── lo copia in templates/components/ del repo CMS
+    └── da quel momento tutti i siti che installano il CMS hanno Hero disponibile
+```
+
+### Priorità di risoluzione
+
+Il builder risolve il component nel seguente ordine:
+
+```
+1. components/Hero.liquid          ← custom del sito (massima priorità)
+2. templates/components/Hero.liquid ← built-in del CMS
+```
+
+Il custom vince sempre. Il crafter può quindi sovrascrivere qualsiasi component built-in senza toccare il codice del CMS.
+
+---
+
 ## Filtri custom registrati dal builder
 
 ```liquid
