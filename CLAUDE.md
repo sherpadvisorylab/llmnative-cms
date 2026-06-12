@@ -66,9 +66,32 @@ cms/
 - [ ] AI Content Assistant: affiancamento creator nella scrittura
 - [ ] SEO Orchestrator Assistant: strategia keyword, Google Trends integration
 
+## Convenzioni di nomenclatura
+
+| Termine | Significato |
+|---|---|
+| **Component** | CMS Component — unità atomica LiquidJS del template system (default, senza qualificazione) |
+| **React component** | Componente `@llmnative/react` — solo quando si deve disambiguare esplicitamente |
+| **Block** | NON usare — termine scartato in favore di Component |
+| **Frame** | NON usare — termine provvisorio sostituito da Component |
+
+`@llmnative/react` è un vendor opaco. Creator, crafter, developer CMS e AI che usano il CMS conoscono solo i CMS Component. Non devono sapere cosa c'è sotto.
+
+## Decisioni tecniche prese
+
+| Decisione | Scelta |
+|---|---|
+| Template engine | **LiquidJS** — sandboxed, browser+node, pre-compilabile |
+| Unit atomica template | **Component** (file `.liquid` in `components/`) |
+| Preview | **BroadcastChannel** in-browser, zero server |
+| Admin UI foundation | **`@llmnative/react`** (vendor opaco) |
+| Agent transform | **SeoAgent**, **OptimizerAgent** (parallelo) |
+| Agent validate | **SentinelAgent** (sequenziale, ultimo) |
+
 ## Note per sessioni future
 
 - Il framework `@llmnative/react` ha già provider SEO con Google Trends/Ads Keywords integrati
 - Il provider AI supporta OpenAI, Anthropic, Gemini, DeepSeek, Mistral — scegliere in fase di implementazione
 - Il data model agnostico usa un envelope JSON standard (vedere `docs/03-data-model.md`)
 - Ogni decisione architetturale significativa va documentata in `docs/`
+- Per il dettaglio completo vedere i file in `docs/` — CLAUDE.md è il sommario
