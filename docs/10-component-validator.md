@@ -85,14 +85,23 @@ Tipo strutturato: `list` (con `children`).
 | `SCHEMA_ORG_INVALID_LIQUID` | error | Sintassi LiquidJS non valida |
 | `SCHEMA_ORG_INVALID_JSON_STATIC` | warning | La parte statica (senza variabili) non è JSON valido |
 
-### Blocchi `{% css %}` e `{% javascript %}`
+### Blocco `{% css %}`
+
+`{% css %}` è un template LiquidJS che riceve solo i namespace di sistema. Il crafter è responsabile della convenzione CSS scelta.
 
 | Codice | Livello | Condizione |
 |---|---|---|
-| `CSS_INVALID_SYNTAX` | warning | Sintassi CSS non valida |
-| `JS_INVALID_SYNTAX` | warning | Sintassi JS non valida |
+| `CSS_INVALID_SYNTAX` | warning | Sintassi CSS non valida (nella parte statica) |
+| `CSS_CREATOR_INPUT_VAR` | error | Variabile di schema input usata in `{% css %}` — solo namespace di sistema permessi |
 
-CSS e JS sono warning, non errori — il crafter ha libertà totale su questi blocchi.
+### Blocco `{% javascript %}`
+
+`{% javascript %}` è statico — non processato come LiquidJS. Le variabili template non sono disponibili.
+
+| Codice | Livello | Condizione |
+|---|---|---|
+| `JS_INVALID_SYNTAX` | warning | Sintassi JS non valida |
+| `JS_LIQUID_VAR` | error | Espressione LiquidJS `{{ }}` o `{% %}` trovata nel blocco JS — non è un template |
 
 ---
 

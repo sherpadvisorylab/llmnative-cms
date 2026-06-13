@@ -393,11 +393,29 @@ Se il crafter conferma la rinomina, l'admin aggiunge automaticamente `alias` al 
 
 ## CSS e JS
 
-- Embed as-is nel bundle della pagina — nessuna regola di scoping imposta
-- Il crafter è responsabile della convenzione che sceglie (BEM, utility classes, ecc.)
 - Il builder concatena i blocchi `{% css %}` e `{% javascript %}` di tutti i component usati in una pagina in un unico bundle per pagina
-- Il blocco `{% schema_org %}` è un template LiquidJS — riceve le stesse variabili del template principale. Il builder lo inietta come `<script type="application/ld+json">` nell'`<head>`
-- Se lo stesso component appare più volte nella pagina, il blocco `{% schema_org %}` viene renderizzato **una volta per istanza** — ogni istanza produce il proprio oggetto JSON-LD con i propri dati
+- Se lo stesso component appare più volte, CSS e JS vengono inclusi **una sola volta** — le istanze condividono lo stesso bundle
+- Il blocco `{% schema_org %}` è un template LiquidJS — riceve le stesse variabili del template principale. Il builder lo inietta come `<script type="application/ld+json">` nell'`<head>` — **una volta per istanza**
+
+### `{% css %}` — template LiquidJS con namespace di sistema
+
+Il blocco `{% css %}` è processato come template LiquidJS. Riceve **solo i namespace di sistema** (`styles`, `site`, `page`) — utile per usare design token nel CSS:
+
+```liquid
+{% css %}
+.hero {
+  background: {{ styles.bg_primary }};
+  font-family: {{ styles.font_primary }};
+  color: {{ styles.text_primary }};
+}
+{% endcss %}
+```
+
+Gli input del creator non sono disponibili nel CSS — sarebbero incoerenti (il CSS è condiviso tra tutte le istanze) e aprirebbero a CSS injection.
+
+### `{% javascript %}` — statico
+
+Il blocco `{% javascript %}` è **statico** — non è processato come LiquidJS. Il codice viene incluso as-is nel bundle. Nessuna variabile disponibile.
 
 ### Isolamento JS tra component
 
