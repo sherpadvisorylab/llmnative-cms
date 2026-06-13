@@ -27,6 +27,51 @@ interface Issue {
 }
 ```
 
+### `detectInputs()`
+
+Funzione utility che analizza il sorgente di un component e restituisce un oggetto `inputs` pre-popolato a partire dalle variabili trovate nel template. Usata dall'admin per pre-compilare il blocco `{% schema %}` quando il crafter incolla un template esistente.
+
+```typescript
+detectInputs(source: string): DetectedInputs
+
+interface DetectedInputs {
+  inputs: Record<string, DetectedField>
+}
+
+interface DetectedField {
+  type:  'string'   // default — il crafter affina nell'admin
+  label: string     // generato dal nome variabile (snake_case → "Snake Case")
+}
+```
+
+**Algoritmo:**
+1. Estrae tutte le espressioni `{{ x }}` e `{{ x.y }}` dal blocco template
+2. Scarta le variabili appartenenti ai namespace di sistema (`page`, `site`, `styles`, `collections`)
+3. Per i loop `{% for X in Y %}`: scarta `X` e tutte le `X.prop` — registra `Y` come `list` con i `children` rilevati
+4. Scarta duplicati
+5. Restituisce `inputs` con `type: "string"` per ogni variabile scalare e `type: "list"` per gli iterabili
+
+```typescript
+// esempio
+detectInputs(`
+  <h1>{{ title }}</h1>
+  {% for item in features %}
+    <p>{{ item.text }}</p>
+  {% endfor %}
+  <p>{{ page.slug }}</p>
+`)
+// → {
+//     inputs: {
+//       title:    { type: "string", label: "Title" },
+//       features: { type: "list",   label: "Features",
+//                   children: { text: { type: "string", label: "Text" } } }
+//     }
+//   }
+// page.slug ignorato (namespace di sistema)
+```
+
+`detectInputs()` è isomorfica e pura come `validateComponent()`. L'output è sempre un punto di partenza — il crafter deve affinare tipi, label, required e opzioni nell'admin.
+
 ---
 
 ## Regole di validazione
@@ -218,6 +263,16 @@ Il validator è **isomorfico**: stesso codice in browser (admin) e Node.js (buil
 ---
 
 ## Punti di chiamata
+
+### Admin UI — import template esistente
+
+Quando il crafter incolla un template HTML/Liquid esistente nell'editor, l'admin chiama `detectInputs()` per pre-popolare il blocco `{% schema %}`:
+
+```typescript
+const detected = detectInputs(pastedSource)
+// pre-popola l'editor schema con detected.inputs
+// il crafter affina tipi e label prima di salvare
+```
 
 ### Admin UI — al salvataggio
 
